@@ -1,0 +1,181 @@
+// =====================================================
+// Harmoney Backend - Prisma Schema
+// Source of truth: ERD (7 tables, no additions)
+// =====================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// =====================================================
+// ENUMS
+// =====================================================
+
+enum Currency {
+  IDR
+  USD
+  EUR
+  SGD
+}
+
+enum ReportFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+}
+
+enum CategoryType {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+}
+
+// =====================================================
+// MODELS
+// =====================================================
+
+model User {
+  user_id          Int             @id @default(autoincrement())
+  name             String
+  email            String          @unique
+  avatar_url       String?
+  currency         Currency        @default(IDR)
+  report_frequency ReportFrequency @default(MONTHLY)
+  created_at       DateTime        @default(now())
+  updated_at       DateTime        @updatedAt
+
+  // Relations
+  auth_credentials AuthCredential[]
+  password_resets  PasswordReset[]
+  wallets          Wallet[]
+  categories       Category[]
+  transactions     Transaction[]
+  savings          Saving[]
+
+  @@map("users")
+}
+
+model AuthCredential {
+  credential_id Int          @id @default(autoincrement())
+  user_id       Int
+  provider      AuthProvider @default(LOCAL)
+  password      String?
+  google_id     String?      @unique
+
+  // Relations
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("auth_credentials")
+}
+
+model PasswordReset {
+  reset_id   Int      @id @default(autoincrement())
+  user_id    Int
+  token_hash String
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([token_hash])
+  @@index([user_id])
+  @@map("password_resets")
+}
+
+model Wallet {
+  wallet_id Int     @id @default(autoincrement())
+  user_id   Int
+  name      String
+  balance   Decimal @default(0) @db.Decimal(15, 2)
+  currency  String  @default("IDR")
+
+  // Relations
+  user         User          @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  transactions Transaction[] @relation("WalletTransactions")
+  transfers_in Transaction[] @relation("WalletTransfersIn")
+  savings      Saving[]
+
+  @@index([user_id])
+  @@map("wallets")
+}
+
+model Category {
+  category_id Int          @id @default(autoincrement())
+  user_id     Int? // nullable: null = default/system category
+  type        CategoryType
+  name        String
+  icon        String?
+
+  // Relations
+  user         User?         @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([user_id])
+  @@map("categories")
+}
+
+model Transaction {
+  transaction_id   Int             @id @default(autoincrement())
+  user_id          Int
+  wallet_id        Int
+  category_id      Int?
+  saving_id        Int?
+  to_wallet_id     Int?
+  amount           Decimal         @db.Decimal(15, 2)
+  date             DateTime
+  description      String?
+  transaction_type TransactionType
+  created_at       DateTime        @default(now())
+
+  // Relations
+  user      User      @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  wallet    Wallet    @relation("WalletTransactions", fields: [wallet_id], references: [wallet_id], onDelete: Cascade)
+  to_wallet Wallet?   @relation("WalletTransfersIn", fields: [to_wallet_id], references: [wallet_id])
+  category  Category? @relation(fields: [category_id], references: [category_id])
+  saving    Saving?   @relation(fields: [saving_id], references: [saving_id])
+
+  @@index([user_id])
+  @@index([wallet_id])
+  @@index([category_id])
+  @@index([date])
+  @@map("transactions")
+}
+
+model Saving {
+  saving_id      Int      @id @default(autoincrement())
+  user_id        Int
+  wallet_id      Int
+  name           String
+  target_amount  Decimal  @db.Decimal(15, 2)
+  current_amount Decimal  @default(0) @db.Decimal(15, 2)
+  start_date     DateTime
+  end_date       DateTime
+  created_at     DateTime @default(now())
+
+  // Relations
+  user         User          @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  wallet       Wallet        @relation(fields: [wallet_id], references: [wallet_id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([user_id])
+  @@index([wallet_id])
+  @@map("savings")
+}
