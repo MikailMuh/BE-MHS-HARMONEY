@@ -1,11 +1,15 @@
 const express = require('express');
+const cors = require('cors');
 const config = require('./src/config/env');
 const prisma = require('./src/config/prisma');
+const {errorHandler, notFoundHandler} = require('./src/middlewares/error.middleware');
 
 const app = express();
 const PORT = 3000;
 
+app.use(cors({origin: config.cors.origins}));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.get('/', (req, res) => {
     res.json({
@@ -28,16 +32,25 @@ app.get('/health', async (req, res) => {
       stats: {
         users: userCount,
       },
+      timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    res.status(500).json({
-      msg: 'Health check failed',
-      error: error.message,
-    });
+    next(error);
   }
 });
+
+app.get('/test-error', (req, res, next) => {
+    const err = new Error('This is a test error');
+    err.statusCode = 418;
+    throw err;
+});
+
+app.use(notFoundHandler);
+app.use(errorHandler);
+
 // buat ngestart server 
 app.listen(PORT, ()=> {
     console.log(`Server is running on http://localhost:${PORT}`);
     console.log(`Environment: ${config.nodeEnv}`);
+    console.log(`Health check: http://localhost:${PORT}/health`);
 });
