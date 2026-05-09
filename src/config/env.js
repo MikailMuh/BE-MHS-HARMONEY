@@ -34,8 +34,8 @@ const config = {
         : process.env.CORS_ORIGINS.split(',').map((o) => o.trim()),
   },
 
-  gemini: {
-    apiKey: process.env.GEMINI_API_KEY || null,
+  pythonOcr: {
+    serviceUrl: process.env.PYTHON_OCR_SERVICE_URL || 'http://127.0.0.1:5000',
   },
 
   upload: {
