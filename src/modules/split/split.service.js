@@ -1,5 +1,3 @@
-
-
 const axios = require('axios');
 const FormData = require('form-data');
 const config = require('../../config/env');
@@ -62,7 +60,6 @@ async function scanReceipt(sessionId, imageBuffer, originalFilename, mimetype) {
     contentType: mimetype,
   });
 
-  // 2. Call Python service
   let pythonResponse;
   try {
     pythonResponse = await axios.post(
@@ -70,7 +67,7 @@ async function scanReceipt(sessionId, imageBuffer, originalFilename, mimetype) {
       formData,
       {
         headers: formData.getHeaders(),
-        timeout: 60000, // 60 sec - PaddleOCR + Groq bisa lambat
+        timeout: 60000, 
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
       }
@@ -85,7 +82,7 @@ async function scanReceipt(sessionId, imageBuffer, originalFilename, mimetype) {
     if (err.code === 'ECONNABORTED') {
       throw new ServiceError('OCR service timeout. Image too complex.', 504);
     }
-    // Python service returned 4xx/5xx
+
     if (err.response) {
       const pythonError =
         err.response.data?.error || 'Unknown OCR service error';
@@ -97,7 +94,6 @@ async function scanReceipt(sessionId, imageBuffer, originalFilename, mimetype) {
     throw new ServiceError(`OCR service error: ${err.message}`, 502);
   }
 
-  // 3. Validate Python response shape
   const { success, data, error } = pythonResponse.data;
   if (!success || !data) {
     throw new ServiceError(
@@ -106,20 +102,15 @@ async function scanReceipt(sessionId, imageBuffer, originalFilename, mimetype) {
     );
   }
 
-  // 4. Sync result ke session
   let session = sessionStore.getSession(sessionId);
   if (!session) {
     session = sessionStore.createSession(sessionId);
   }
 
-  // Set transaction date dari OCR (kalo ada)
   if (data.date) {
     session.transactionDate = data.date;
   }
 
-  // Convert OCR items ke format session.items
-  // OCR returns: { name, quantity, unit_price, total_price }
-  // Session item:  { itemId, name, price, quantity, sharedWith }
   if (Array.isArray(data.items)) {
     for (const ocrItem of data.items) {
       const newItem = {
@@ -139,11 +130,6 @@ async function scanReceipt(sessionId, imageBuffer, originalFilename, mimetype) {
 
   return session;
 }
-
-/**
- * POST /api/split/friend/:sessionId
- * Add friend ke session.
- */
 function addFriend(sessionId, friendName) {
   if (!friendName || friendName.trim() === '') {
     throw new ServiceError('Friend name cannot be empty', 400);
@@ -164,10 +150,6 @@ function addFriend(sessionId, friendName) {
   return session;
 }
 
-/**
- * PATCH /api/split/friend/:sessionId/:oldName
- * Rename friend.
- */
 function editFriend(sessionId, oldName, newName) {
   if (!newName || newName.trim() === '') {
     throw new ServiceError('New friend name cannot be empty', 400);
@@ -186,7 +168,6 @@ function editFriend(sessionId, oldName, newName) {
     throw new ServiceError(`Friend "${oldName}" not found`, 404);
   }
 
-  // Cek duplicate dengan nama baru
   const duplicate = session.friends.find(
     (f) =>
       f.name.toLowerCase() === trimmedNewName.toLowerCase() && f.name !== oldName
@@ -195,10 +176,7 @@ function editFriend(sessionId, oldName, newName) {
     throw new ServiceError('Another friend with this name already exists', 409);
   }
 
-  // Rename di friend list
   friend.name = trimmedNewName;
-
-  // Update juga di item.sharedWith (kalo ke-assign)
   for (const item of session.items) {
     if (item.sharedWith && item.sharedWith.includes(oldName)) {
       item.sharedWith = item.sharedWith.map((n) =>
@@ -211,10 +189,6 @@ function editFriend(sessionId, oldName, newName) {
   return session;
 }
 
-/**
- * DELETE /api/split/friend/:sessionId/:name
- * Remove friend.
- */
 function deleteFriend(sessionId, name) {
   const session = getSession(sessionId);
 
@@ -241,10 +215,6 @@ function deleteFriend(sessionId, name) {
   return session;
 }
 
-/**
- * POST /api/split/item/:sessionId
- * Add item manual.
- */
 function addItem(sessionId, itemData) {
   const { name, price, quantity } = itemData;
 
@@ -273,10 +243,7 @@ function addItem(sessionId, itemData) {
   return session;
 }
 
-/**
- * PATCH /api/split/item/:sessionId/:itemId
- * Edit item (partial update).
- */
+
 function editItem(sessionId, itemId, updates) {
   const session = getSession(sessionId);
   const item = session.items.find((i) => i.itemId === Number(itemId));
@@ -310,9 +277,7 @@ function editItem(sessionId, itemId, updates) {
   return session;
 }
 
-/**
- * DELETE /api/split/item/:sessionId/:itemId
- */
+
 function deleteItem(sessionId, itemId) {
   const session = getSession(sessionId);
   const idx = session.items.findIndex((i) => i.itemId === Number(itemId));
@@ -328,10 +293,7 @@ function deleteItem(sessionId, itemId) {
   return session;
 }
 
-/**
- * PUT /api/split/assign/:sessionId/:itemId
- * Assign friends ke item (replace, bukan append).
- */
+
 function assignFriendsToItem(sessionId, itemId, friendNames) {
   if (!Array.isArray(friendNames)) {
     throw new ServiceError('sharedWith must be an array of friend names', 400);
@@ -359,18 +321,13 @@ function assignFriendsToItem(sessionId, itemId, friendNames) {
   return session;
 }
 
-/**
- * GET /api/split/summary/:sessionId
- * Calculate split per friend.
- */
+
 function getSummary(sessionId) {
   const session = getSession(sessionId);
 
-  // Pastiin totals up-to-date
   recalculateTotalAmount(session);
   recalculateFriendTotals(session);
 
-  // Build summary per friend
   const participants = session.friends.map((friend) => {
     const friendItems = session.items
       .filter((item) => item.sharedWith && item.sharedWith.includes(friend.name))
@@ -396,9 +353,6 @@ function getSummary(sessionId) {
   };
 }
 
-// ============================================================
-// CUSTOM ERROR (biar controller bisa map ke status code)
-// ============================================================
 
 class ServiceError extends Error {
   constructor(message, statusCode = 400) {
@@ -420,6 +374,5 @@ module.exports = {
   deleteItem,
   assignFriendsToItem,
   getSummary,
-  // Error class (dipake controller buat type-check)
   ServiceError,
 };

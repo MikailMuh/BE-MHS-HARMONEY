@@ -1,5 +1,4 @@
 
-
 const { Prisma } = require('@prisma/client');
 const config = require('../config/env');
 
